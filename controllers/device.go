@@ -1,11 +1,18 @@
 package controllers
 
 import (
+	//"bufio"
 	"fmt"
 	"gw/config"
 	"gw/model"
+
+	//"io"
+	//"io/ioutil"
+	"os"
 	"strconv"
 	"time"
+
+	//"github.com/EDDYCJY/go-gin-example/pkg/util"
 
 	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/gin-gonic/gin"
@@ -53,6 +60,32 @@ func (tc *BaseController) DeviceList(c *gin.Context) {
 		Count: len,
 	}
 	c.JSON(200, gin.H{"status": 0, "msg": "OK", "data": data})
+	return
+}
+
+func (tc *BaseController) DeviceMapList(c *gin.Context) {
+	var (
+		token           model.DeviceMapList
+		selectCompanyId int
+	)
+
+	if err := c.ShouldBindJSON(&token); err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	selectCompanyId = token.CompanyId
+
+	_, companyId, authErr := tc.CheckAuth(token.TokenString, "", true)
+	if authErr != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": authErr.Error()})
+		return
+	}
+	list, err := m.DeviceMapList(selectCompanyId, companyId, token)
+	if err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"status": 0, "msg": "OK", "data": list})
 	return
 }
 
@@ -172,5 +205,111 @@ func (tc *BaseController) DeviceImport(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"status": 0, "msg": "OK", "data": num})
+	return
+}
+
+func (tc *BaseController) DeviceStateList(c *gin.Context) {
+	var (
+		token           model.DeviceList
+		selectCompanyId int
+	)
+	router := c.Request.RequestURI
+
+	if err := c.ShouldBindJSON(&token); err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	selectCompanyId = token.CompanyId
+
+	_, companyId, authErr := tc.CheckAuth(token.TokenString, router, false)
+	if authErr != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": authErr.Error()})
+		return
+	}
+	len, list, err := m.GetdeviceStateList(selectCompanyId, companyId, token)
+	if err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	data := struct {
+		List  []model.GetDeviceList `json:"list"`
+		Count int64                 `json:"count"`
+	}{
+		List:  list,
+		Count: len,
+	}
+	c.JSON(200, gin.H{"status": 0, "msg": "OK", "data": data})
+	return
+}
+
+func (tc *BaseController) DeviceExport(c *gin.Context) {
+	router := c.Request.RequestURI
+	selectCompanyId := c.PostForm("companyId")
+	onlineState := c.PostForm("online_state")
+	token := c.PostForm("token")
+	addkeys := c.PostForm("addkeys")
+
+	_, companyId, authErr := tc.CheckAuth(token, router, false)
+	if authErr != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": authErr.Error()})
+		return
+	}
+	list, err := m.GetExportDeviceList(companyId, selectCompanyId, onlineState, addkeys)
+	if err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	f := excelize.NewFile()
+	index := f.NewSheet("Sheet1")
+	for key, val := range list {
+		fmt.Println(val)
+		i := key + 1
+		f.SetCellValue("Sheet1", fmt.Sprintf("A%v", i), val.CompanyName)
+		f.SetCellValue("Sheet1", fmt.Sprintf("B%v", i), val.DeviceId)
+		if val.Status == 0 {
+			f.SetCellValue("Sheet1", fmt.Sprintf("C%v", i), "未安装")
+		} else {
+			if val.State == "70" {
+				f.SetCellValue("Sheet1", fmt.Sprintf("C%v", i), "离线")
+			} else {
+				f.SetCellValue("Sheet1", fmt.Sprintf("C%v", i), "在线")
+			}
+		}
+		f.SetCellValue("Sheet1", fmt.Sprintf("D%v", i), val.Signal)
+		f.SetCellValue("Sheet1", fmt.Sprintf("E%v", i), val.Address)
+		f.SetCellValue("Sheet1", fmt.Sprintf("F%v", i), val.Manager)
+		f.SetCellValue("Sheet1", fmt.Sprintf("G%v", i), val.Tel)
+	}
+	f.SetActiveSheet(index)
+	fileName := strconv.FormatInt(time.Now().UnixNano(), 10) + ".xlsx"
+	fileerr := f.SaveAs(config.ExportFolder + fileName)
+	if fileerr != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": fileerr.Error()})
+		return
+	}
+
+	extraHeaders := make(map[string]string)
+	extraHeaders["Content-Disposition"] = `attachment; filename="` + fileName + `"`
+	//extraHeaders["Content-Description"] = "File Transfer"
+	//extraHeaders["Content-Transfer-Encoding"] = "binary"
+	extraHeaders["Expires"] = "0"
+	extraHeaders["Cache-Control"] = "must-revalidate"
+	extraHeaders["Pragma"] = "public"
+
+	// c.Header("Content-Disposition", "attachment; filename="+fileName)
+	// c.Header("Content-Description", "File Transfer")
+	// c.Header("Content-Type", "application/octet-stream")
+	// c.Header("Content-Transfer-Encoding", "binary")
+	// c.Header("Expires", "0")
+	// c.Header("Cache-Control", "must-revalidate")
+	// c.Header("Pragma", "public")
+	nf, _ := os.Open(config.ExportFolder + fileName)
+	defer nf.Close()
+	fi, _ := nf.Stat()
+	//fi.Size()
+
+	c.DataFromReader(200, fi.Size(), "application/octet-stream", nf, extraHeaders)
+
+	// c.JSON(200, gin.H{"status": 0, "msg": "OK"})
 	return
 }

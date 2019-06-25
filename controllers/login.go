@@ -99,6 +99,37 @@ func (tc *BaseController) Home(c *gin.Context) {
 	}
 }
 
+func (tc *BaseController) ChangePsd(c *gin.Context) {
+	var (
+		token model.ReqChangePsd
+	)
+	if err := c.ShouldBindJSON(&token); err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	userId, comId, autherr := tc.CheckAuth(token.TokenString, "", true)
+	if autherr != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": autherr.Error()})
+		return
+	}
+	if token.NewPsd != token.RepeatPsd {
+		c.JSON(200, gin.H{"status": -1, "msg": fmt.Errorf("输入的密码不一致")})
+		return
+	}
+	if userId != token.UserId {
+		c.JSON(200, gin.H{"status": -1, "msg": fmt.Errorf("用户错误")})
+		return
+	}
+	err := m.ChangePassword(token, comId)
+	if err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"status": 0, "msg": "OK", "data": ""})
+	return
+
+}
+
 // 生成令牌
 func generateToken(user model.GwUser) (string, error) {
 	claims := jwt.MapClaims{

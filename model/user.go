@@ -36,7 +36,18 @@ type GetUserList struct {
 	GwUser      `xorm:"extends"`
 }
 
+type ResUserInfo struct {
+	Id        int      `json:"Id" xorm:"not null pk autoincr INT(11)"`
+	Name      string   `json:"name" xorm:"not null default '' comment('用户名') VARCHAR(255)"`
+	Phone     string   `json:"phone" xorm:"not null default '' comment('电话') unique(uniuser) VARCHAR(255)"`
+	CompanyId int      `json:"company_id" xorm:"not null default 0 comment('公司ID') unique(uniuser) INT(11)"`
+	Status    int      `json:"status" xorm:"not null default 1 comment('是否禁用') INT(11)"`
+	Access    []string `json:"access"`
+}
+
 type GetDeviceList struct {
+	Manager     string `json:"main_name"`
+	Tel         string `json:"tel"`
 	CompanyName string `xorm:"comname" json:"company"`
 	GwDevice    `xorm:"extends"`
 }
@@ -48,17 +59,21 @@ func (user *Model) GetUserList(userId int, companyId int, selectCompanyId int) (
 		// auth  []GwAuthority
 	)
 
-	queryCompanyId := companyId
-
-	if selectCompanyId != 0 && companyId == 1 {
-		queryCompanyId = selectCompanyId
+	if companyId != 1 && selectCompanyId != companyId {
+		return users, fmt.Errorf("You have no permisson")
 	}
+
 	db, _ := utils.Connect()
 
-	err := db.Table("gw_user").Select("gw_user.id,gw_user.name,gw_user.company_id,gw_user.phone,gw_user.status,gw_user.auth_ids,gw_company.name as comname").
-		Join("INNER", "gw_company", "gw_user.company_id = gw_company.id").
-		Where("gw_user.company_id = ?", queryCompanyId).Find(&users)
-	// db.ShowSQL(true)
+	xSession := db.Table("gw_user").Select("gw_user.id,gw_user.name,gw_user.real_name,gw_user.company_id,gw_user.phone,gw_user.status,gw_user.auth_ids,gw_company.name as comname").
+		Join("INNER", "gw_company", "gw_user.company_id = gw_company.id")
+
+	if companyId == 1 && selectCompanyId == 0 {
+		xSession = xSession.Where("1=1")
+	} else {
+		xSession = xSession.Where("gw_user.company_id = ?", selectCompanyId)
+	}
+	err := xSession.Find(&users)
 	if err != nil {
 		return users, err
 	}
@@ -95,16 +110,29 @@ func (user *Model) UserGetCompanySelectList(companyId int) ([]GwCompany, error) 
 	return company, nil
 }
 
-func (user *Model) GetUserInfoByUserid(userId int) (GwUser, error) {
+func (user *Model) GetUserInfoByUserid(userId int) (ResUserInfo, error) {
 	var (
-		gwuser GwUser
+		gwuser  GwUser
+		auth    []GwAuthority
+		resUser ResUserInfo
 	)
 	db, _ := utils.Connect()
 	found, _ := db.Cols("name", "id", "company_id", "auth_ids").Where("id = ?", userId).Get(&gwuser)
 	if found == false {
-		return gwuser, fmt.Errorf("not found")
+		return resUser, fmt.Errorf("not found")
 	}
-	return gwuser, nil
+	db.In("id", strings.Split(gwuser.AuthIds, ",")).Find(&auth)
+	for i := range auth {
+		if auth[i].Access != "" {
+			resUser.Access = append(resUser.Access, auth[i].Access)
+		}
+	}
+	resUser.Id = gwuser.Id
+	resUser.CompanyId = gwuser.CompanyId
+	resUser.Name = gwuser.Name
+	resUser.Phone = gwuser.Phone
+	resUser.Status = gwuser.Status
+	return resUser, nil
 }
 
 func (user *Model) GetAllAuth() ([]*GwAuthority, error) {
