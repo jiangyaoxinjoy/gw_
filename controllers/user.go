@@ -216,6 +216,8 @@ func (tc *BaseController) UserInfo(c *gin.Context) {
 	var (
 		token Token
 	)
+	// authToken := c.Request.Header.Get("token")
+	// fmt.Println(authToken)
 	if err := c.ShouldBindJSON(&token); err != nil {
 		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
 		return
