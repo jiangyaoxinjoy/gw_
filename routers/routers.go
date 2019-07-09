@@ -36,4 +36,10 @@ func CreateRouters(r *gin.Engine, tc *controllers.BaseController) {
 	r.POST("/deviceexport", tc.DeviceExport)
 	r.POST("/deviceEventExport", tc.DeviceEventExport)
 	r.POST("/exportAlertTrace", tc.ExportAlertTrace)
+	r.POST("/devicemonitoring", tc.DeviceMonitoring)
+	r.POST("/alertAnalyze", tc.AlertAnalyze)
+	r.POST("/showUnalertDevice", tc.ShowUnalertDeivce)
+	r.POST("/wx/alertAllCount", tc.WxAlertAllCount)
+	r.POST("/wx/setupDevice", tc.WxSetupDevice)
+	r.POST("/wx/stateAlert", tc.StateAlert)
 }

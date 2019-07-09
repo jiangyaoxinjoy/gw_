@@ -25,6 +25,7 @@ type GwAlert struct {
 	Sendtime    string    `json:"sendtime" xorm:"comment('发送时间') VARCHAR(255)"`
 	Restoretime int       `json:"restoretime" xorm:"comment('水压恢复时间') INT(11)"`
 	RestoreId   int       `json:"restore_id" xorm:"INT(11)"`
+	Isnotify    int       `json:"isnotify" xorm:"not null default 0 comment('通知是否送达') INT(11)"`
 }
 
 type GwAuthSub struct {
@@ -66,6 +67,7 @@ type GwDevice struct {
 	Hearttime  string    `json:"hearttime" xorm:"comment('心跳时间') VARCHAR(255)"`
 	AlertId    int       `json:"alert_id" xorm:"INT(11)"`
 	Signal     string    `json:"signal" xorm:"VARCHAR(255)"`
+	Battery    string    `json:"battery" xorm:"VARCHAR(255)"`
 	Descrip    string    `json:"descrip" xorm:"VARCHAR(255)"`
 }
 
@@ -89,7 +91,9 @@ type GwUser struct {
 	Createtime time.Time `json:"createtime" xorm:"not null default 'CURRENT_TIMESTAMP' comment('创建时间') TIMESTAMP"`
 	LoginTime  time.Time `json:"login_time" xorm:"comment('登录时间') TIMESTAMP"`
 	Status     int       `json:"status" xorm:"not null default 1 comment('是否禁用') INT(11)"`
+	OpenId     string    `json:"open_id" xorm:"VARCHAR(255)"`
 }
+
 type GwNotify struct {
 	Id          int    `json:"Id" xorm:"not null pk autoincr INT(11)"`
 	UserId      int    `json:"user_id" xorm:"comment('通知人ID') INT(11)"`
@@ -99,4 +103,13 @@ type GwNotify struct {
 	DeviceId    string `json:"device_id" xorm:"comment('设备ID') VARCHAR(255)"`
 	State       int    `json:"state" xorm:"INT(11)"`
 	Receivetime int    `json:"receivetime" xorm:"INT(11)"`
+}
+
+type GwAnalyze struct {
+	Id        int    `json:"Id" xorm:"not null pk autoincr INT(11)"`
+	Daytime   int    `json:"daytime" xorm:"INT(11)"`
+	Cola      int    `json:"cola" xorm:"INT(11)"`
+	Colb      int    `json:"colb" xorm:"INT(11)"`
+	Colc      int    `json:"colc" xorm:"INT(11)"`
+	Daystring string `json:"dayString" xorm:"VARCHAR(255)"`
 }

@@ -46,6 +46,9 @@ type DeviceAlertInfo struct {
 	DeviceId string      `json:"deviceId"`
 	Teles    []GwUser    `json:"teles"`
 	Notify   []ResNotify `json:"notify_infos"`
+	Isnotify int         `json:"isnotify"`
+	Lat      string      `json:"lat"`
+	Lng      string      `json:"lng"`
 }
 
 type ResNotify struct {
@@ -143,7 +146,7 @@ func (alert *Model) GetAlertList(params DeviceParams, ComId int) (int64, []GetDe
 	}
 
 	total, _ := countSession.Count(&deviceCount)
-	if err := xSession.Limit(params.Limit, params.Offset).Asc("hearttime").Find(&devices); err != nil {
+	if err := xSession.Limit(params.Limit, params.Offset).Desc("hearttime").Find(&devices); err != nil {
 		return total, devices, err
 	}
 	return total, devices, nil
@@ -170,9 +173,10 @@ func (alert *Model) GetDeviceAlertInfoByDeviceId(deviceId string) (DeviceAlertIn
 		return deviceAlertInfo, fmt.Errorf("not found company")
 	}
 
-	if found, _ := db.Where("id = ?", device.AlertId).Get(&gwalert); found == false {
-		return deviceAlertInfo, fmt.Errorf("not found alert")
-	}
+	// if found, _ := db.Where("id = ?", device.AlertId).Get(&gwalert); found == false {
+	// 	return deviceAlertInfo, fmt.Errorf("not found alert")
+	// }
+	db.Where("id = ?", device.AlertId).Get(&gwalert)
 	deviceAlertInfo.Address = device.Address
 	deviceAlertInfo.Cola = gwalert.Cola
 	deviceAlertInfo.State = device.State
@@ -180,6 +184,9 @@ func (alert *Model) GetDeviceAlertInfoByDeviceId(deviceId string) (DeviceAlertIn
 	deviceAlertInfo.Value2 = company.Value2
 	deviceAlertInfo.SendTime = gwalert.Sendtime
 	deviceAlertInfo.DeviceId = device.DeviceId
+	deviceAlertInfo.Isnotify = gwalert.Isnotify
+	deviceAlertInfo.Lat = device.Lat
+	deviceAlertInfo.Lng = device.Lng
 	// err := db.Where("device_id = ? ", device.DeviceId).Desc("sendtime").Limit(3).Find(&nofify);err != nil {
 	// 	return  deviceAlertInfo,err
 	// }
@@ -283,7 +290,7 @@ func (alert *Model) GetUserNotifyHistory(userId int, deviceId string) ([]GwNotif
 		notify []GwNotify
 	)
 	db, _ := utils.Connect()
-	if err := db.Where("user_id = ?", userId).And("device_id = ?", deviceId).Find(&notify); err != nil {
+	if err := db.Where("user_id = ?", userId).And("device_id = ?", deviceId).Limit(100).Find(&notify); err != nil {
 		return notify, err
 	}
 	return notify, nil
@@ -346,14 +353,34 @@ func (alert *Model) GetAlertHistory(params ReqAlertHistory, companyId int) (int6
 	if len(resAlertForHistory) > 0 {
 		for k, v := range resAlertForHistory {
 			var (
-				notifystate GwNotify
+			//notifyState   GwNotify
+			// unNotifyState []GwNotify
 			)
-			notifycount, _ := db.Where("alert_id = ?", v.Id).And("state = ?", 1).And("type = ?", 1).Count(&notifystate)
-			if notifycount == 0 {
-				resAlertForHistory[k].NotifyStatus = 0
-			} else {
+			//没有送达
+			if v.Isnotify == 0 {
 				resAlertForHistory[k].NotifyStatus = 1
+				var (
+					users []GwUser
+				)
+				db.Where("company_id = ?", v.CompanyId).And("auth_ids like '%4'").Find(&users)
+				// userNum, _ := db.SQL("select user_id from gw_notify where alert_id = ?", v.Id).FindAndCount(&unNotifyState)
+				if len(users) > 0 {
+					for _, r := range users {
+						var countNotify GwNotify
+						unNotifycount, _ := db.Where("alert_id = ?", v.Id).And("user_id = ?", r.Id).And("type = 1").And("state = 1").Count(&countNotify)
+						if unNotifycount == 0 {
+							resAlertForHistory[k].NotifyStatus = 0
+						}
+					}
+				} else {
+					resAlertForHistory[k].NotifyStatus = 0
+				}
+				if resAlertForHistory[k].NotifyStatus == 1 {
+					//更新为已经送达
+					db.Where("Id = ?", v.Id).Update(GwAlert{Isnotify: 1})
+				}
 			}
+
 		}
 	}
 	return count, resAlertForHistory, nil

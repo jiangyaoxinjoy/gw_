@@ -14,7 +14,7 @@ func main() {
 	r := gin.Default()
 	r.Use(Cors())
 	routers.CreateRouters(r, baseController)
-	r.Run("127.0.0.1:8087")
+	r.Run("192.168.1.41:8087")
 }
 
 ////// 跨域

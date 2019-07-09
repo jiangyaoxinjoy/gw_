@@ -1,18 +1,13 @@
 package controllers
 
 import (
-	//"bufio"
-	"fmt"
 	"gw/config"
 	"gw/model"
 
-	//"io"
-	//"io/ioutil"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
-
-	//"github.com/EDDYCJY/go-gin-example/pkg/util"
 
 	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/gin-gonic/gin"
@@ -27,6 +22,11 @@ type UpLoadFile struct {
 	TokenString string `form:"token" binding:"required"`
 	CompanyId   int    `form:"companyId" binding:"required"`
 	ImportType  int    `form:"importType" binding:"required"`
+}
+
+type ReqMonitoring struct {
+	CompanyId   int    `json:"companyId"`
+	TokenString string `json:"token" binding:"required"`
 }
 
 func (tc *BaseController) DeviceList(c *gin.Context) {
@@ -311,5 +311,54 @@ func (tc *BaseController) DeviceExport(c *gin.Context) {
 	c.DataFromReader(200, fi.Size(), "application/octet-stream", nf, extraHeaders)
 
 	// c.JSON(200, gin.H{"status": 0, "msg": "OK"})
+	return
+}
+
+func (tc *BaseController) DeviceMonitoring(c *gin.Context) {
+	var (
+		query ReqMonitoring
+	)
+
+	if err := c.ShouldBindJSON(&query); err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+
+	// token := c.Request.Header.Get("token")
+	_, companyId, authErr := tc.CheckAuth(query.TokenString, "", true)
+	if authErr != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": authErr.Error()})
+		return
+	}
+
+	data, err := m.GetDeviceMonitoring(companyId, query.CompanyId)
+	if err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"status": 0, "msg": "OK", "data": data})
+	return
+}
+
+func (tc *BaseController) ShowUnalertDeivce(c *gin.Context) {
+	var (
+		params model.ReqDeviceUnalert
+	)
+	token := c.Request.Header.Get("token")
+	_, companyId, authErr := tc.CheckAuth(token, "", true)
+	if authErr != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": authErr.Error()})
+		return
+	}
+	if err := c.ShouldBindJSON(&params); err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	data, err := m.GetUnalertDevice(params, companyId)
+	if err != nil {
+		c.JSON(200, gin.H{"status": -1, "msg": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"status": 0, "msg": "OK", "data": data})
 	return
 }

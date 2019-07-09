@@ -35,11 +35,32 @@ type DeviceMapList struct {
 	OnlineState  int     `json:"online_state"`
 }
 
+type ReqDeviceUnalert struct {
+	MinLatitude  float64 `json:"minLatitude"`
+	MaxLatitude  float64 `json:"maxLatitude"`
+	MinLongitude float64 `json:"minLongitude"`
+	MaxLongitude float64 `json:"maxLongitude"`
+	CompanyId    int     `json:"companyId"`
+	TokenString  string  `json:"token" binding:"required"`
+}
+
 type ExportDeviceQuery struct {
 	TokenString string `form:"token"`
 	CompanyId   int    `form:"companyId"`
 	AddKeys     string `form:"addkeys"`
 	OnlineState int    `form:"online_state"`
+}
+
+type ResDeviceMonitoring struct {
+	Device           []GwDevice `json:"alertList"`
+	DeviceTotal      int64      `json:"deviceTotal"`
+	AlertDeviceCount int64      `json:"alertTotal"`
+	OpenCount        int64      `json:"opc"`
+	SignalCount      int64      `json:"sigc"`
+	PressureCount    int64      `json:"prec"`
+	DownCount        int64      `json:"downc"`
+	PowerCount       int64      `json:"powerc"`
+	LossCount        int64      `json:"lossc"`
 }
 
 func (user *Model) DeviceList(selectCompanyId int, companyId int, params DeviceList) (int64, []GetDeviceList, error) {
@@ -76,11 +97,11 @@ func (user *Model) DeviceList(selectCompanyId int, companyId int, params DeviceL
 		countSession = countSession.And("gw_device.address like ?", "%"+params.AddKeys+"%")
 	}
 	if params.OnlineState == 1 {
-		xSession = xSession.And("gw_device.state != ?", "70").And("gw_device.status = ?", 1)
-		countSession = countSession.And("gw_device.state != ?", "70").And("gw_device.status = ?", 1)
+		xSession = xSession.And("gw_device.state != ?", "70").And("gw_device.state != ?", "80").And("gw_device.status = ?", 1)
+		countSession = countSession.And("gw_device.state != ?", "70").And("gw_device.state != ?", "80").And("gw_device.status = ?", 1)
 	} else if params.OnlineState == 2 {
-		xSession = xSession.And("gw_device.state = ?", "70").And("gw_device.status = ?", 1)
-		countSession = countSession.And("gw_device.state = ?", "70").And("gw_device.status = ?", 1)
+		xSession = xSession.And("gw_device.state = ?", "70").Or("gw_device.state = ?", "80").And("gw_device.status = ?", 1)
+		countSession = countSession.And("gw_device.state = ?", "70").Or("gw_device.state = ?", "80").And("gw_device.status = ?", 1)
 	}
 
 	xSession = xSession.Table("gw_device").Select("gw_device.*,gw_company.name as comname,gw_company.manager,gw_company.tel").
@@ -149,9 +170,9 @@ func (user *Model) DeviceMapList(selectCompanyId int, companyId int, params Devi
 		xSession = xSession.And("gw_device.address like ?", "%"+params.AddKeys+"%")
 	}
 	if params.OnlineState == 1 {
-		xSession = xSession.And("gw_device.state != ?", "70").And("gw_device.status = ?", 1)
+		xSession = xSession.And("gw_device.state != ?", "70").And("gw_device.state != ?", "80").And("gw_device.status = ?", 1)
 	} else if params.OnlineState == 2 {
-		xSession = xSession.And("gw_device.state = ?", "70").And("gw_device.status = ?", 1)
+		xSession = xSession.And("gw_device.state = ?", "70").Or("gw_device.state = ?", "80").And("gw_device.status = ?", 1)
 	}
 
 	err := xSession.Table("gw_device").Select("gw_device.*,gw_company.name as comname,gw_company.manager,gw_company.tel").
@@ -165,18 +186,6 @@ func (user *Model) DeviceMapList(selectCompanyId int, companyId int, params Devi
 		return devices, err
 	}
 	return devices, nil
-	// for _, v := range devices {
-	// 			////myLatitude, myLongitude, minLatitude, maxLatitude, minLongitude, maxLongitude
-	// 			myLatitude, _ := strconv.ParseFloat(v.Lat, 64)
-	// 			myLongitude, _ := strconv.ParseFloat(v.Lng, 64)
-	// 			if isInArea(myLatitude, myLongitude, params.MinLatitude, params.MaxLatitude, params.MinLongitude, params.MaxLongitude) {
-	// 				geoDevice = append(geoDevice, v)
-	// 			}
-	// 		}
-	// 		fmt.Println(len(geoDevice))
-	// 		return  geoDevice, nil
-	// }
-	// return num, devices, nil
 }
 
 func (user *Model) AddOneDevice(device GwDevice) error {
@@ -378,4 +387,101 @@ func isInArea(latitue float64, longitude float64, areaLatitude1 float64, areaLat
 	} else {
 		return false
 	}
+}
+
+func (user *Model) GetDeviceMonitoring(companyId int, selectCompanyId int) (ResDeviceMonitoring, error) {
+	var (
+		deviceCount      int64
+		device           GwDevice
+		alertDeviceCount int64
+		alertDevices     []GwDevice
+		xsession         *xorm.Session
+		openCount        int64
+		signalCount      int64
+		pressureCount    int64
+		downCount        int64
+		powerCount       int64
+		lossCount        int64
+		resData          ResDeviceMonitoring
+	)
+	queryCompanyId := selectCompanyId
+	if companyId != 1 {
+		queryCompanyId = companyId
+	}
+	db, _ := utils.Connect()
+
+	// if queryCompanyId == 0 {
+	// 	xsession = db.Where("1=1")
+	// } else {
+	// 	xsession = db.Where("company_id = ?", queryCompanyId)
+	// }
+
+	if queryCompanyId == 0 {
+		alertDeviceCount, _ = db.Where("state IN ('10','20','30','70')").Count(&device)
+		xsession = db.Where("state IN ('10','20','30','70')")
+		deviceCount, _ = db.Count(&device)
+		openCount, _ = db.Where("state = ?", "20").Count(&device)
+		pressureCount, _ = db.Where("state = ?", "10").Count(&device)
+		downCount, _ = db.Where("state = ?", "30").Count(&device)
+		lossCount, _ = db.Where("state = ?", "70").Count(&device)
+		signalCount, _ = db.Where("`signal` < ?", "18").Count(&device)
+		powerCount, _ = db.Where("battery < ?", 15).Count(&device)
+
+	} else {
+		deviceCount, _ = db.Where("company_id = ?", queryCompanyId).Count(&device)
+		alertDeviceCount, _ = db.Where("company_id = ?", queryCompanyId).And("state IN ('10','20','30','70')").Count(&device)
+		xsession = db.Where("company_id = ?", queryCompanyId).And("state IN ('10','20','30','70')")
+		openCount, _ = db.Where("state = ?", "20").And("company_id = ?", queryCompanyId).Count(&device)
+		pressureCount, _ = db.Where("state = ?", "10").And("company_id = ?", queryCompanyId).Count(&device)
+		downCount, _ = db.Where("state = ?", "30").And("company_id = ?", queryCompanyId).Count(&device)
+		lossCount, _ = db.Where("state = ?", "70").And("company_id = ?", queryCompanyId).Count(&device)
+		signalCount, _ = db.Where("`signal` < ?", "15").And("company_id = ?", queryCompanyId).Count(&device)
+		powerCount, _ = db.Where("battery < ?", 15).And("company_id = ?", queryCompanyId).Count(&device)
+	}
+	if err := xsession.Desc("hearttime").Find(&alertDevices); err != nil {
+		return resData, err
+	}
+	resData.Device = alertDevices
+	resData.DeviceTotal = deviceCount
+	resData.AlertDeviceCount = alertDeviceCount
+	resData.DownCount = downCount
+	resData.LossCount = lossCount
+	resData.OpenCount = openCount
+	resData.PowerCount = powerCount
+	resData.PressureCount = pressureCount
+	resData.SignalCount = signalCount
+	return resData, nil
+
+}
+
+func (user *Model) GetUnalertDevice(params ReqDeviceUnalert, companyId int) ([]GetDeviceList, error) {
+	var (
+		devices         []GetDeviceList
+		selectCompanyId int
+		xSession        *xorm.Session
+	)
+	db, _ := utils.Connect()
+	selectCompanyId = params.CompanyId
+	if companyId != 1 {
+		selectCompanyId = companyId
+	}
+	db.ShowSQL(true)
+	if selectCompanyId == 0 {
+		xSession = db.Where("1=1")
+	} else {
+		xSession = db.Where("company_id = ?", selectCompanyId)
+	}
+	xSession = xSession.NotIn("state", "10", "20", "30", "70")
+
+	err := xSession.Table("gw_device").Select("gw_device.*,gw_company.name as comname,gw_company.manager,gw_company.tel").
+		Join("INNER", "gw_company", "gw_device.company_id = gw_company.id").
+		And("gw_device.lng >= ?", params.MinLongitude).
+		And("gw_device.lng <= ?", params.MaxLongitude).
+		And("gw_device.lat >= ?", params.MinLatitude).
+		And("gw_device.lat <= ?", params.MaxLatitude).
+		Find(&devices)
+	if err != nil {
+		return devices, err
+	}
+	return devices, nil
 }
